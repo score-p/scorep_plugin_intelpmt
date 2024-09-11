@@ -1,0 +1,6 @@
+[submodule "lib/libintelpmt"]
+	path = lib/libintelpmt
+	url = https://github.com://cvonelm/libintelpmt
+[submodule "lib/scorep_plugin_cxx_wrapper"]
+	path = lib/scorep_plugin_cxx_wrapper
+	url = https://github.com/score-p/scorep_plugin_cxx_wrapper.git
