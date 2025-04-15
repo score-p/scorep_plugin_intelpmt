@@ -17,8 +17,9 @@ using TVPair = std::pair<scorep::chrono::ticks, double>;
 class IntelPMTMeasurementThread
 {
 public:
-    IntelPMTMeasurementThread(intelpmt::Device& dev, std::chrono::milliseconds interval)
-    : instance_(dev.open()), interval_(interval)
+    IntelPMTMeasurementThread(std::unique_ptr<intelpmt::Device>& dev,
+                              std::chrono::milliseconds interval)
+    : instance_(intelpmt::DeviceInstance(dev)), interval_(interval)
     {
     }
 
@@ -104,9 +105,9 @@ public:
         if (std::regex_match(metric_name, counter_match, counter_regex))
         {
             std::string metric_path = counter_match[1];
-            auto& devices = intelpmt::get_pmt_devices();
+            auto devices = intelpmt::get_pmt_devices();
             auto dev = std::find_if(devices.begin(), devices.end(), [metric_path](auto& arg) {
-                return arg.get_path() == metric_path;
+                return arg->get_path() == metric_path;
             });
 
             if (dev == devices.end())
@@ -121,48 +122,18 @@ public:
                               std::forward_as_tuple(*dev, measurement_interval_));
             }
 
-            if (counter_match[2] == "*")
-            {
-                for (auto& counter : dev->get_counter_names())
-                {
-                    pmts_.at(metric_path).add_counter(counter.second);
-
-                    counters.push_back(
-                        scorep::plugin::metric_property(metric_name, metric_name,
-                                                        dev->get_units().at(counter.second).unit)
-                            .absolute_point()
-                            .value_double());
-
-                    make_handle(metric_name, metric_path, counter.second);
-                }
-            }
-            else
-            {
                 std::string counter_name = counter_match[2];
-                auto& counter_names = dev->get_counter_names();
-                auto counter =
-                    std::find_if(counter_names.begin(), counter_names.end(),
-                                 [&counter_name](auto arg) { return arg.first == counter_name; });
+                uint64_t counter_id = dev->get()->get_counter_id_by_name(counter_name);
 
-                if (counter != counter_names.end())
-                {
+                pmts_.at(metric_path).add_counter(counter_id);
 
-                    pmts_.at(metric_path).add_counter(counter->second);
+                counters.push_back(
+                    scorep::plugin::metric_property(metric_name, metric_name,
+                                                    dev->get()->get_unit_by_id(counter_id).unit)
+                        .absolute_point()
+                        .value_double());
 
-                    counters.push_back(
-                        scorep::plugin::metric_property(metric_name, metric_name,
-                                                        dev->get_units().at(counter->second).unit)
-                            .absolute_point()
-                            .value_double());
-
-                    make_handle(metric_name, metric_path, counter->second);
-                }
-                else
-                {
-                    logging::warn() << "Could not find counter: " << counter_name << " in device "
-                                    << metric_path;
-                }
-            }
+                make_handle(metric_name, metric_path, counter_id);
         }
         else
         {
